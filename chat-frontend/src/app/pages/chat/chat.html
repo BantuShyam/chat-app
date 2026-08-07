@@ -1,70 +1,49 @@
 <div class="chat-container">
 
-    <h2>Spring Boot WebSocket Chat</h2>
+  <h2>Spring Boot WebSocket Chat</h2>
 
-    <div class="join-box" *ngIf="!joined">
+  <div class="join-box" *ngIf="!joined">
+    <h2>Join Chat</h2>
+    <input [(ngModel)]="username" placeholder="Your name">
+    <button (click)="join()">Join</button>
+  </div>
 
-        <h2>Join Chat</h2>
+  <div class="chat-layout" *ngIf="joined">
 
-        <input
-        [(ngModel)]="username"
-        placeholder="Enter your name">
-
-        <button (click)="join()">
-        Join
-        </button>
-
+    <div class="sidebar">
+      <h3>Online</h3>
+      <div
+        *ngFor="let user of onlineUsers()"
+        class="user-item"
+        [class.active]="user === receiver"
+        (click)="selectUser(user)">
+        {{user}}
+      </div>
+      <p *ngIf="onlineUsers().length === 0" class="empty">No one else online</p>
     </div>
-    <div *ngIf="joined">
 
-    <h2>Welcome {{username}}</h2>
+    <div class="chat-panel">
+      <h3 *ngIf="receiver">Chatting with {{receiver}}</h3>
+      <p *ngIf="!receiver" class="empty">Select a user to start chatting</p>
 
-    <div class="messages">
-
+      <div class="messages" *ngIf="receiver">
         <div
-            *ngFor="let msg of messages"
-            class="message">
-
-            {{msg}}
-
+          *ngFor="let msg of messages(); trackBy: trackByIndex"
+          class="message"
+          [class.self]="msg.sender === username">
+          <strong>{{msg.sender}}</strong>: {{msg.message}}
         </div>
+      </div>
 
-    </div>
-
-    <div class="send-box">
-
+      <div class="send-box" *ngIf="receiver">
         <input
-            [(ngModel)]="message"
-            (keyup.enter)="send()"
-            placeholder="Type message">
-
-        <button (click)="send()">
-            Send
-        </button>
-
+          [(ngModel)]="message"
+          (keyup.enter)="send()"
+          placeholder="Type message">
+        <button (click)="send()">Send</button>
+      </div>
     </div>
 
-</div>
-
-    <div class="messages">
-
-        <div *ngFor="let msg of messages">
-
-            {{msg}}
-
-        </div>
-
-    </div>
-
-    <input
-        [(ngModel)]="message"
-        (keyup.enter)="send()"
-        placeholder="Type message">
-
-    <button (click)="send()">
-
-        Send
-
-    </button>
+  </div>
 
 </div>
