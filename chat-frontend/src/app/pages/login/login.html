@@ -1,0 +1,27 @@
+<div class="auth-container">
+  <div class="auth-box">
+    <h2>{{ mode === 'login' ? 'Log In' : 'Create Account' }}</h2>
+
+    <input
+      [(ngModel)]="username"
+      placeholder="Username"
+      (keyup.enter)="submit()">
+
+    <input
+      [(ngModel)]="password"
+      type="password"
+      placeholder="Password"
+      (keyup.enter)="submit()">
+
+    <p class="error" *ngIf="error">{{ error }}</p>
+
+    <button (click)="submit()">
+      {{ mode === 'login' ? 'Log In' : 'Sign Up' }}
+    </button>
+
+    <p class="toggle">
+      {{ mode === 'login' ? "Don't have an account?" : 'Already have an account?' }}
+      <a (click)="toggleMode()">{{ mode === 'login' ? 'Sign up' : 'Log in' }}</a>
+    </p>
+  </div>
+</div>

@@ -1,14 +1,11 @@
 <div class="chat-container">
 
-  <h2>Spring Boot WebSocket Chat</h2>
-
-  <div class="join-box" *ngIf="!joined">
-    <h2>Join Chat</h2>
-    <input [(ngModel)]="username" placeholder="Your name">
-    <button (click)="join()">Join</button>
+  <div class="header">
+    <h2>Spring Boot WebSocket Chat</h2>
+    <button class="logout-btn" (click)="logout()">Logout</button>
   </div>
 
-  <div class="chat-layout" *ngIf="joined">
+  <div class="chat-layout">
 
     <div class="sidebar">
       <h3>Online</h3>
