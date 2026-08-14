@@ -7,6 +7,11 @@ export interface ChatMessageRecord {
   receiver: string;
   message: string;
   timestamp: string;
+  status: 'SENT' | 'DELIVERED' | 'SEEN';
+  messageId: string;
+  attachmentData?: string | null;
+  attachmentType?: string | null;
+  attachmentName?: string | null;
 }
 
 @Injectable({

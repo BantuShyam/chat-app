@@ -1,46 +1,359 @@
-<div class="chat-container">
+<div class="chat-app">
 
-  <div class="header">
-    <h2>Spring Boot WebSocket Chat</h2>
-    <button class="logout-btn" (click)="logout()">Logout</button>
-  </div>
+  <aside class="sidebar">
 
-  <div class="chat-layout">
+    <div class="sidebar-top">
 
-    <div class="sidebar">
-      <h3>Online</h3>
-      <div
-        *ngFor="let user of onlineUsers()"
-        class="user-item"
-        [class.active]="user === receiver"
-        (click)="selectUser(user)">
-        {{user}}
+      <div class="profile-section">
+
+        <label class="profile-avatar-wrapper" title="Change profile picture">
+          <img
+            *ngIf="myProfilePicture()"
+            [src]="myProfilePicture()"
+            class="profile-avatar-img"
+          />
+          <div
+            *ngIf="!myProfilePicture()"
+            class="profile-avatar"
+          >
+            {{ username.charAt(0).toUpperCase() }}
+          </div>
+
+          <input
+            type="file"
+            accept="image/*"
+            (change)="onProfilePictureSelected($event)"
+            hidden
+          />
+        </label>
+
+        <div class="profile-name">
+          {{ username }}
+        </div>
+
       </div>
-      <p *ngIf="onlineUsers().length === 0" class="empty">No one else online</p>
+
+      <button
+        type="button"
+        class="logout-button"
+        title="Logout"
+        (click)="logout()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5"></path>
+          <path d="M14 8l4 4-4 4"></path>
+          <path d="M18 12H9"></path>
+        </svg>
+      </button>
+
     </div>
 
-    <div class="chat-panel">
-      <h3 *ngIf="receiver">Chatting with {{receiver}}</h3>
-      <p *ngIf="!receiver" class="empty">Select a user to start chatting</p>
+    <div class="sidebar-title">
 
-      <div class="messages" *ngIf="receiver">
+      <span>Chats</span>
+
+      <button
+        type="button"
+        class="icon-button"
+        title="Search"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="M20 20l-4-4"></path>
+        </svg>
+      </button>
+
+    </div>
+
+    <div class="user-list">
+
+      <div
+        *ngFor="let user of chatUsers()"
+        class="user-item"
+        [class.active]="receiver === user"
+        [class.has-unread]="unreadCounts()[user]"
+        (click)="selectUser(user)"
+      >
+
+        <img
+          *ngIf="getUserAvatar(user)"
+          [src]="getUserAvatar(user)"
+          class="avatar-img"
+        />
         <div
-          *ngFor="let msg of messages(); trackBy: trackByIndex"
-          class="message"
-          [class.self]="msg.sender === username">
-          <strong>{{msg.sender}}</strong>: {{msg.message}}
+          *ngIf="!getUserAvatar(user)"
+          class="avatar"
+        >
+          {{ user.charAt(0).toUpperCase() }}
         </div>
+
+        <div class="user-info">
+
+          <div class="user-name">
+            {{ user }}
+          </div>
+
+          <div
+            class="user-status"
+            [class.offline]="!isUserOnline(user)"
+          >
+            <span
+              class="status-dot"
+              [class.online]="isUserOnline(user)"
+            ></span>
+
+            {{ isUserOnline(user) ? 'Online' : 'Offline' }}
+          </div>
+
+        </div>
+
+        <div
+          *ngIf="unreadCounts()[user]"
+          class="unread-badge"
+        >
+          {{ unreadCounts()[user] }}
+        </div>
+
       </div>
 
-      <div class="send-box" *ngIf="receiver">
+      <div
+        *ngIf="chatUsers().length === 0"
+        class="no-users"
+      >
+        No conversations
+      </div>
+
+    </div>
+
+  </aside>
+
+
+  <main class="chat-area">
+
+    <header
+      class="chat-header"
+      *ngIf="receiver"
+    >
+
+      <img
+        *ngIf="getUserAvatar(receiver)"
+        [src]="getUserAvatar(receiver)"
+        class="chat-user-avatar-img"
+      />
+      <div
+        *ngIf="!getUserAvatar(receiver)"
+        class="chat-user-avatar"
+      >
+        {{ receiver.charAt(0).toUpperCase() }}
+      </div>
+
+      <div class="chat-user-info">
+
+        <div class="chat-user-name">
+          {{ receiver }}
+        </div>
+
+        <div
+          class="chat-user-status"
+          [class.offline]="!isUserOnline(receiver)"
+        >
+          <span
+            class="status-dot"
+            [class.online]="isUserOnline(receiver)"
+          ></span>
+
+          {{ isUserOnline(receiver) ? 'Online' : 'Offline' }}
+        </div>
+
+      </div>
+
+      <div class="chat-actions">
+
+        <button type="button" title="Video call">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="6" width="13" height="12" rx="2"></rect>
+            <path d="M16 10l5-3v10l-5-3"></path>
+          </svg>
+        </button>
+
+        <button type="button" title="Search">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="M20 20l-4-4"></path>
+          </svg>
+        </button>
+
+        <button type="button" title="More">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="5" r="1"></circle>
+            <circle cx="12" cy="12" r="1"></circle>
+            <circle cx="12" cy="19" r="1"></circle>
+          </svg>
+        </button>
+
+      </div>
+
+    </header>
+
+
+    <div class="empty-chat" *ngIf="!receiver">
+
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5h16v11H8l-4 4V5z"></path>
+          <path d="M8 9h8"></path>
+          <path d="M8 12h5"></path>
+        </svg>
+      </div>
+
+      <h2>Welcome to Chat</h2>
+      <p>Select a conversation to start chatting.</p>
+
+    </div>
+
+
+    <div class="messages-area" *ngIf="receiver">
+
+      <div
+        *ngFor="let msg of messages(); trackBy: trackByIndex"
+        class="message-row"
+        [class.sent]="msg.sender === username"
+        [class.received]="msg.sender !== username"
+      >
+
+        <div class="message-bubble">
+
+          <div class="message-attachment" *ngIf="msg.attachmentData">
+            <img
+              *ngIf="isImageAttachment(msg.attachmentType)"
+              [src]="msg.attachmentData"
+              class="attachment-image"
+              (click)="openImage(msg.attachmentData!)"
+            />
+            <a
+            
+              *ngIf="!isImageAttachment(msg.attachmentType)"
+              [href]="msg.attachmentData"
+              [download]="msg.attachmentName"
+              class="attachment-doc"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <path d="M14 2v6h6"></path>
+              </svg>
+              <span>{{ msg.attachmentName }}</span>
+            </a>
+          </div>
+
+          <div class="message-text" *ngIf="msg.message">
+            {{ msg.message }}
+          </div>
+
+          <div class="message-meta">
+
+            <span class="message-time">
+              {{ getMessageTime(msg.timestamp) }}
+            </span>
+
+            <span
+              *ngIf="msg.sender === username"
+              class="message-check"
+              [ngClass]="getTickClass(msg.status)"
+            >
+              <ng-container *ngIf="msg.status === 'SENT'">&#10003;</ng-container>
+              <ng-container *ngIf="msg.status !== 'SENT'">&#10003;&#10003;</ng-container>
+            </span>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="message-input-area-wrapper" *ngIf="receiver">
+
+      <div class="emoji-picker" *ngIf="showEmojiPicker()">
+        <button
+          type="button"
+          *ngFor="let emoji of emojis"
+          class="emoji-option"
+          (click)="addEmoji(emoji)"
+        >
+          {{ emoji }}
+        </button>
+      </div>
+
+      <div class="attachment-preview" *ngIf="pendingAttachment() as att">
+        <img
+          *ngIf="isImageAttachment(att.type)"
+          [src]="att.data"
+          class="attachment-preview-image"
+        />
+        <span *ngIf="!isImageAttachment(att.type)" class="attachment-preview-doc">
+          {{ att.name }}
+        </span>
+        <button type="button" class="attachment-remove" (click)="clearAttachment()">Remove</button>
+      </div>
+
+      <div class="message-input-area">
+
+        <button
+          type="button"
+          class="input-icon"
+          title="Emoji"
+          (click)="toggleEmojiPicker()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <circle cx="9" cy="10" r="1"></circle>
+            <circle cx="15" cy="10" r="1"></circle>
+            <path d="M8 14c1 2 2.5 3 4 3s3-1 4-3"></path>
+          </svg>
+        </button>
+
         <input
+          type="text"
           [(ngModel)]="message"
           (keyup.enter)="send()"
-          placeholder="Type message">
-        <button (click)="send()">Send</button>
+          placeholder="Type a message"
+        />
+
+        <label class="input-icon" title="Attach">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 11.5l-8.5 8.5a6 6 0 0 1-8.5-8.5l9-9a4 4 0 0 1 5.5 5.8l-8.5 8.5a2 2 0 0 1-3-3l8-8"></path>
+          </svg>
+          <input
+            type="file"
+            accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.ppt,.pptx"
+            (change)="onAttachmentSelected($event)"
+            hidden
+          />
+        </label>
+
+        <button
+          type="button"
+          class="send-button"
+          (click)="send()"
+          [disabled]="!message.trim() && !pendingAttachment()"
+          title="Send"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 20l18-8L3 4l3 7 8 1-8 1-3 7z"></path>
+          </svg>
+        </button>
+
       </div>
+
     </div>
 
+  </main>
+  <div class="image-lightbox" *ngIf="enlargedImage()" (click)="closeImage()">
+    <img [src]="enlargedImage()" (click)="$event.stopPropagation()" />
+    <button type="button" class="lightbox-close" (click)="closeImage()">Close</button>
   </div>
+
 
 </div>

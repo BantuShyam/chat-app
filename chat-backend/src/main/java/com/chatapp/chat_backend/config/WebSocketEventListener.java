@@ -1,6 +1,11 @@
 package com.chatapp.chat_backend.config;
 
+import com.chatapp.chat_backend.dto.MessageStatusUpdate;
+import com.chatapp.chat_backend.model.ChatHistory;
+import com.chatapp.chat_backend.model.MessageStatus;
+import com.chatapp.chat_backend.repository.ChatHistoryRepository;
 import com.chatapp.chat_backend.service.UserSessionService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -11,8 +16,13 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 
 import java.security.Principal;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Component
+@Slf4j
 public class WebSocketEventListener {
 
     @Autowired
@@ -21,50 +31,68 @@ public class WebSocketEventListener {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
+    @Autowired
+    private ChatHistoryRepository chatHistoryRepository;
+
     @EventListener
     public void handleConnect(SessionConnectedEvent event) {
-        SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
-        Principal principal = accessor.getUser();
 
-        System.out.println("=== CONNECT EVENT === Principal: " + (principal != null ? principal.getName() : "NULL"));
+        Principal principal = event.getUser();
 
-        if (principal != null) {
-            userSessionService.addUser(principal.getName());
-            System.out.println("Online users now: " + userSessionService.getOnlineUsers());
-            broadcastOnlineUsers();
-        }
-    }
+        SimpMessageHeaderAccessor accessor =
+                SimpMessageHeaderAccessor.wrap(event.getMessage());
 
-    @EventListener
-    public void handleSubscribe(SessionSubscribeEvent event) {
-        SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
-        String destination = accessor.getDestination();
-        Principal principal = accessor.getUser();
+        String sessionId = accessor.getSessionId();
 
-        System.out.println("=== SUBSCRIBE EVENT === destination: " + destination + " principal: " + (principal != null ? principal.getName() : "NULL"));
+        if (principal != null && sessionId != null) {
 
-        if ("/topic/online-users".equals(destination) && principal != null) {
-            messagingTemplate.convertAndSendToUser(
-                    principal.getName(),
-                    "/queue/online-users-init",
-                    userSessionService.getOnlineUsers()
-            );
-            System.out.println("Sent initial online-users snapshot to " + principal.getName());
-        }
-    }
+            String username = principal.getName();
 
-    @EventListener
-    public void handleDisconnect(SessionDisconnectEvent event) {
-        SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
-        Principal principal = accessor.getUser();
+            userSessionService.addUser(sessionId, username);
 
-        if (principal != null) {
-            userSessionService.removeUser(principal.getName());
+            log.info("[CHAT] WebSocket connected for user: {}", username);
+
+            deliverPendingMessages(username);
             broadcastOnlineUsers();
         }
     }
 
     private void broadcastOnlineUsers() {
-        messagingTemplate.convertAndSend("/topic/online-users", userSessionService.getOnlineUsers());
+
+        var onlineUsers = userSessionService.getOnlineUsers();
+
+        messagingTemplate.convertAndSend(
+                "/topic/online-users",
+                onlineUsers
+        );
+
+        log.info(
+                "[CHAT] Online-user list broadcast: {}",
+                onlineUsers
+        );
+    }
+
+    private void deliverPendingMessages(String username) {
+        List<ChatHistory> pending = chatHistoryRepository
+                .findByReceiverAndStatus(username, MessageStatus.SENT);
+
+        if (pending.isEmpty()) return;
+
+        pending.forEach(m -> m.setStatus(MessageStatus.DELIVERED));
+        chatHistoryRepository.saveAll(pending);
+
+        Map<String, List<UUID>> bySender = pending.stream()
+                .collect(Collectors.groupingBy(
+                        ChatHistory::getSender,
+                        Collectors.mapping(ChatHistory::getMessageId, Collectors.toList())
+                ));
+
+        bySender.forEach((sender, ids) ->
+                messagingTemplate.convertAndSendToUser(
+                        sender,
+                        "/queue/message-status",
+                        new MessageStatusUpdate(ids, username, "DELIVERED")
+                )
+        );
     }
 }

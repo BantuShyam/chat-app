@@ -1,24 +1,39 @@
-package com.chatapp.chat_backend.service;
+        package com.chatapp.chat_backend.service;
 
-import org.springframework.stereotype.Service;
+        import lombok.extern.slf4j.Slf4j;
+        import org.springframework.stereotype.Service;
 
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+        import java.util.HashSet;
+        import java.util.Set;
+        import java.util.concurrent.ConcurrentHashMap;
 
-@Service
-public class UserSessionService {
+        @Service
+        @Slf4j
+        public class UserSessionService {
 
-    private final Set<String> onlineUsers = ConcurrentHashMap.newKeySet();
+            private final ConcurrentHashMap<String, String> sessions =
+                    new ConcurrentHashMap<>();
 
-    public void addUser(String username) {
-        onlineUsers.add(username);
-    }
+            public void addUser(String sessionId, String username) {
 
-    public void removeUser(String username) {
-        onlineUsers.remove(username);
-    }
+                sessions.put(sessionId, username);
 
-    public Set<String> getOnlineUsers() {
-        return onlineUsers;
-    }
-}
+                log.info("[CHAT] User connected: {}", username);
+                log.info("[CHAT] Online users: {}", getOnlineUsers());
+            }
+
+            public void removeUser(String sessionId) {
+
+                String username = sessions.remove(sessionId);
+
+                if (username != null) {
+                    log.info("[CHAT] User disconnected: {}", username);
+                }
+
+                log.info("[CHAT] Online users: {}", getOnlineUsers());
+            }
+
+            public Set<String> getOnlineUsers() {
+                return new HashSet<>(sessions.values());
+            }
+        }
