@@ -13,7 +13,6 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
-import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 
 import java.security.Principal;
 import java.util.List;
@@ -57,6 +56,20 @@ public class WebSocketEventListener {
         }
     }
 
+    @EventListener
+    public void handleDisconnect(SessionDisconnectEvent event) {
+
+        SimpMessageHeaderAccessor accessor =
+                SimpMessageHeaderAccessor.wrap(event.getMessage());
+
+        String sessionId = accessor.getSessionId();
+
+        if (sessionId != null) {
+            userSessionService.removeUser(sessionId);
+            broadcastOnlineUsers();
+        }
+    }
+
     private void broadcastOnlineUsers() {
 
         var onlineUsers = userSessionService.getOnlineUsers();
@@ -66,10 +79,7 @@ public class WebSocketEventListener {
                 onlineUsers
         );
 
-        log.info(
-                "[CHAT] Online-user list broadcast: {}",
-                onlineUsers
-        );
+        log.info("[CHAT] Online-user list broadcast: {}", onlineUsers);
     }
 
     private void deliverPendingMessages(String username) {

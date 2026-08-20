@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { WebsocketService } from './websocket.service';
@@ -61,6 +61,36 @@ export class ChatComponent implements OnInit, OnDestroy {
   enlargedImage = signal<string | null>(null);
   typingUsers = signal<{ [username: string]: boolean }>({});
 
+  showSidebarSearch = signal<boolean>(false);
+  sidebarSearchQuery = signal<string>('');
+
+  showConversationSearch = signal<boolean>(false);
+  conversationSearchQuery = signal<string>('');
+  searchMatchCount = signal<number>(0);
+  currentMatchIndex = signal<number>(0);
+
+  showMoreMenu = signal<boolean>(false);
+  showContactInfo = signal<boolean>(false);
+
+filteredChatUsers = computed(() => {
+  const query = this.sidebarSearchQuery().trim().toLowerCase();
+
+  const users = [
+    ...new Set([
+      ...this.chatUsers(),
+      ...this.onlineUsers()
+    ])
+  ].filter(user => user !== this.username);
+
+  if (!query) {
+    return users;
+  }
+
+  return users.filter(user =>
+    user.toLowerCase().includes(query)
+  );
+});
+
   private typingTimeout: any = null;
 
   constructor(
@@ -70,19 +100,20 @@ export class ChatComponent implements OnInit, OnDestroy {
     private userService: UserService
   ) {}
 
-  ngOnInit(): void {
-    this.username = this.authService.getUsername() || '';
+ngOnInit(): void {
+  this.username = this.authService.getUsername() || '';
+  const token = this.authService.getToken(); // adjust to your actual AuthService method name
 
-    this.loadChatUsers();
+  this.loadChatUsers();
 
-    this.userService.getProfilePicture(this.username).subscribe({
-      next: (res: ProfilePictureResponse) => this.myProfilePicture.set(res.profilePicture),
-      error: () => {}
-    });
+  this.userService.getProfilePicture(this.username).subscribe({
+    next: (res: ProfilePictureResponse) => this.myProfilePicture.set(res.profilePicture),
+    error: () => {}
+  });
 
-    this.socket.connect(
-      this.username,
-      (msg: ChatMessage) => {
+  this.socket.connect(
+    token || '',
+    (msg: ChatMessage) =>  {
 
         this.addChatUser(msg.sender);
         this.addChatUser(msg.receiver);
@@ -175,14 +206,26 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
 
     try {
-      const users: string[] = JSON.parse(savedUsers);
+      const users: string[] = JSON.parse(savedUsers)
+        .filter((user: string) => user !== this.username);
 
-      this.chatUsers.set(
-        users.filter(user => user !== this.username)
-      );
+      this.chatUsers.set(users);
+      this.refreshProfilePictures(users);
     } catch {
       localStorage.removeItem('chatUsers');
     }
+  }
+
+  private refreshProfilePictures(usernames: string[]): void {
+    const missing = usernames.filter(u => !this.profilePictures()[u]);
+    if (missing.length === 0) return;
+
+    this.userService.getProfilePictures(missing).subscribe({
+      next: (pics) => {
+        this.profilePictures.update(current => ({ ...current, ...pics }));
+      },
+      error: () => {}
+    });
   }
 
   addChatUser(user: string): void {
@@ -205,6 +248,8 @@ export class ChatComponent implements OnInit, OnDestroy {
 
       return updatedUsers;
     });
+
+    this.refreshProfilePictures([user]);
   }
 
   isUserOnline(user: string): boolean {
@@ -217,6 +262,13 @@ export class ChatComponent implements OnInit, OnDestroy {
     this.messages.set([]);
     this.showEmojiPicker.set(false);
     this.pendingAttachment.set(null);
+
+    this.showConversationSearch.set(false);
+    this.conversationSearchQuery.set('');
+    this.searchMatchCount.set(0);
+    this.currentMatchIndex.set(0);
+    this.showMoreMenu.set(false);
+    this.showContactInfo.set(false);
 
     this.typingUsers.update(current => ({ ...current, [user]: false }));
 
@@ -325,14 +377,121 @@ export class ChatComponent implements OnInit, OnDestroy {
     const file = input.files?.[0];
     if (!file) return;
 
-    this.resizeAndCompressImage(file, 200, 200, 0.8).then(base64 => {
-      this.userService.uploadProfilePicture(base64).subscribe({
-        next: () => this.myProfilePicture.set(base64),
-        error: () => {}
+    this.resizeAndCompressImage(file, 200, 200, 0.8)
+      .then(base64 => {
+        this.userService.uploadProfilePicture(base64).subscribe({
+          next: () => this.myProfilePicture.set(base64),
+          error: (err) => {
+            console.error('Failed to upload profile picture', err);
+            alert('Could not update your profile picture. Please try again.');
+          }
+        });
+      })
+      .catch(err => {
+        console.error('Failed to process image', err);
+        alert('Could not process that image. Please try a different file.');
       });
-    });
 
     input.value = '';
+  }
+
+  toggleSidebarSearch(): void {
+    this.showSidebarSearch.update(v => !v);
+    if (!this.showSidebarSearch()) {
+      this.sidebarSearchQuery.set('');
+    }
+  }
+
+  toggleConversationSearch(): void {
+    this.showConversationSearch.update(v => !v);
+    if (!this.showConversationSearch()) {
+      this.conversationSearchQuery.set('');
+      this.searchMatchCount.set(0);
+      this.currentMatchIndex.set(0);
+    }
+  }
+
+  onConversationSearchInput(): void {
+    const query = this.conversationSearchQuery().trim().toLowerCase();
+
+    if (!query) {
+      this.searchMatchCount.set(0);
+      this.currentMatchIndex.set(0);
+      return;
+    }
+
+    const count = this.messages().filter(m =>
+      m.message?.toLowerCase().includes(query)
+    ).length;
+
+    this.searchMatchCount.set(count);
+    this.currentMatchIndex.set(count > 0 ? 1 : 0);
+
+    setTimeout(() => this.scrollToMatch(0), 0);
+  }
+
+  isMessageMatch(msg: ChatMessage): boolean {
+    const query = this.conversationSearchQuery().trim().toLowerCase();
+    if (!query || !msg.message) return false;
+    return msg.message.toLowerCase().includes(query);
+  }
+
+  nextMatch(): void {
+    const count = this.searchMatchCount();
+    if (count === 0) return;
+    const next = this.currentMatchIndex() >= count ? 1 : this.currentMatchIndex() + 1;
+    this.currentMatchIndex.set(next);
+    this.scrollToMatch(next - 1);
+  }
+
+  prevMatch(): void {
+    const count = this.searchMatchCount();
+    if (count === 0) return;
+    const prev = this.currentMatchIndex() <= 1 ? count : this.currentMatchIndex() - 1;
+    this.currentMatchIndex.set(prev);
+    this.scrollToMatch(prev - 1);
+  }
+
+  private scrollToMatch(matchOrdinal: number): void {
+    const elements = document.querySelectorAll('.message-highlight');
+    const target = elements[matchOrdinal] as HTMLElement | undefined;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  toggleMoreMenu(event: Event): void {
+    event.stopPropagation();
+    this.showMoreMenu.update(v => !v);
+  }
+
+  openContactInfo(): void {
+    this.showMoreMenu.set(false);
+    this.showContactInfo.set(true);
+  }
+
+  closeContactInfo(): void {
+    this.showContactInfo.set(false);
+  }
+
+  clearChat(): void {
+    this.showMoreMenu.set(false);
+
+    if (!this.receiver) return;
+
+    const confirmed = confirm(`Clear all messages with ${this.receiver}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    this.historyService.clearConversation(this.username, this.receiver).subscribe({
+      next: () => this.messages.set([]),
+      error: (err) => {
+        console.error('Failed to clear chat', err);
+        alert('Could not clear this chat. Please try again.');
+      }
+    });
+  }
+
+  @HostListener('document:click')
+  closeMoreMenu(): void {
+    this.showMoreMenu.set(false);
   }
 
   private resizeAndCompressImage(
@@ -449,4 +608,108 @@ export class ChatComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.socket.disconnect();
   }
+  getDateOnly(timestamp: string | undefined): string {
+  if (!timestamp) {
+    return '';
+  }
+
+  const date = new Date(timestamp);
+
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+shouldShowDateSeparator(index: number): boolean {
+  const messages = this.messages();
+
+  if (index === 0) {
+    return true;
+  }
+
+  const currentDate = this.getDateOnly(messages[index].timestamp);
+  const previousDate = this.getDateOnly(messages[index - 1].timestamp);
+
+  return currentDate !== previousDate;
+}
+
+getDateSeparatorLabel(timestamp: string | undefined): string {
+  if (!timestamp) {
+    return '';
+  }
+
+  const date = new Date(timestamp);
+  const today = new Date();
+
+  // Today
+  if (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  ) {
+    return 'Today';
+  }
+
+  // Yesterday
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (
+    date.getFullYear() === yesterday.getFullYear() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getDate() === yesterday.getDate()
+  ) {
+    return 'Yesterday';
+  }
+
+  // Same week
+  if (this.isSameWeek(date, today)) {
+    return date.toLocaleDateString([], {
+      weekday: 'long'
+    });
+  }
+
+  // Older messages
+  return date.toLocaleDateString([], {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+}
+
+private isSameWeek(date1: Date, date2: Date): boolean {
+  const startOfWeek = (date: Date): Date => {
+    const result = new Date(date);
+    const day = result.getDay();
+
+    result.setDate(result.getDate() - day);
+    result.setHours(0, 0, 0, 0);
+
+    return result;
+  };
+
+  return (
+    startOfWeek(date1).getTime() ===
+    startOfWeek(date2).getTime()
+  );
+}
+
+closeChat(): void {
+  if (this.receiver) {
+    this.socket.sendTyping(this.username, this.receiver, false);
+  }
+
+  this.receiver = '';
+
+  this.messages.set([]);
+
+  this.showEmojiPicker.set(false);
+  this.pendingAttachment.set(null);
+
+  this.showConversationSearch.set(false);
+  this.conversationSearchQuery.set('');
+  this.searchMatchCount.set(0);
+  this.currentMatchIndex.set(0);
+
+  this.showMoreMenu.set(false);
+  this.showContactInfo.set(false);
+}
 }

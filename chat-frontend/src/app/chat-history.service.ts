@@ -26,4 +26,8 @@ export class ChatHistoryService {
   getConversation(user1: string, user2: string): Observable<ChatMessageRecord[]> {
     return this.http.get<ChatMessageRecord[]>(`${this.baseUrl}/${user1}/${user2}`);
   }
+
+  clearConversation(user1: string, user2: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${user1}/${user2}`);
+  }
 }

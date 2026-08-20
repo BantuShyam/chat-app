@@ -1,5 +1,6 @@
 package com.chatapp.chat_backend.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -12,11 +13,14 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    @Autowired
+    private JwtUtil jwtUtil;
+
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/chat")
                 .setAllowedOriginPatterns("*")
-                .setHandshakeHandler(new CustomHandshakeHandler())
+                .setHandshakeHandler(new CustomHandshakeHandler(jwtUtil))
                 .withSockJS();
     }
 

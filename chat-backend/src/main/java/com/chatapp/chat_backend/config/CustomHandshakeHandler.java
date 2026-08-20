@@ -1,5 +1,6 @@
 package com.chatapp.chat_backend.config;
 
+import com.chatapp.chat_backend.config.JwtUtil;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
@@ -11,19 +12,34 @@ import java.util.Map;
 
 public class CustomHandshakeHandler extends DefaultHandshakeHandler {
 
+    private final JwtUtil jwtUtil;
+
+    public CustomHandshakeHandler(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
+    }
+
     @Override
     protected Principal determineUser(
             ServerHttpRequest request,
             WebSocketHandler wsHandler,
             Map<String, Object> attributes) {
 
-        String username = null;
+        String token = null;
+
         if (request instanceof ServletServerHttpRequest servletRequest) {
-            username = servletRequest.getServletRequest().getParameter("username");
+            token = servletRequest.getServletRequest().getParameter("token");
         }
 
-        final String finalUsername = (username != null) ? username : "anon-" + System.currentTimeMillis();
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Missing token in WebSocket handshake");
+        }
 
-        return () -> finalUsername;
+        if (!jwtUtil.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token in WebSocket handshake");
+        }
+
+        String username = jwtUtil.extractUsername(token);
+
+        return () -> username;
     }
 }

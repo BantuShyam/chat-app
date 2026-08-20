@@ -19,6 +19,13 @@
             {{ username.charAt(0).toUpperCase() }}
           </div>
 
+          <div class="profile-avatar-edit-badge">
+            <svg viewBox="0 0 24 24" aria-hidden="true" width="12" height="12">
+              <path d="M4 7h3l2-2h6l2 2h3v12H4V7z"></path>
+              <circle cx="12" cy="13" r="3.5"></circle>
+            </svg>
+          </div>
+
           <input
             type="file"
             accept="image/*"
@@ -56,6 +63,7 @@
         type="button"
         class="icon-button"
         title="Search"
+        (click)="toggleSidebarSearch()"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="11" cy="11" r="7"></circle>
@@ -65,10 +73,18 @@
 
     </div>
 
+    <div class="sidebar-search-bar" *ngIf="showSidebarSearch()">
+      <input
+        type="text"
+        placeholder="Search chats..."
+        [(ngModel)]="sidebarSearchQuery"
+      />
+    </div>
+
     <div class="user-list">
 
       <div
-        *ngFor="let user of chatUsers()"
+        *ngFor="let user of filteredChatUsers()"
         class="user-item"
         [class.active]="receiver === user"
         [class.has-unread]="unreadCounts()[user]"
@@ -123,6 +139,13 @@
         No conversations
       </div>
 
+      <div
+        *ngIf="chatUsers().length > 0 && filteredChatUsers().length === 0"
+        class="no-users"
+      >
+        No chats match "{{ sidebarSearchQuery() }}"
+      </div>
+
     </div>
 
   </aside>
@@ -175,25 +198,66 @@
             <path d="M16 10l5-3v10l-5-3"></path>
           </svg>
         </button>
+                <button
+  type="button"
+  class="close-chat-button"
+  title="Close chat"
+  (click)="closeChat()"
+>
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6 6l12 12"></path>
+    <path d="M18 6L6 18"></path>
+  </svg>
+</button>
 
-        <button type="button" title="Search">
+        <button type="button" title="Search" (click)="toggleConversationSearch()">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="7"></circle>
             <path d="M20 20l-4-4"></path>
           </svg>
         </button>
 
-        <button type="button" title="More">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="5" r="1"></circle>
-            <circle cx="12" cy="12" r="1"></circle>
-            <circle cx="12" cy="19" r="1"></circle>
-          </svg>
-        </button>
+        <div class="more-menu-wrapper">
+          <button type="button" title="More" (click)="toggleMoreMenu($event)">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="5" r="1"></circle>
+              <circle cx="12" cy="12" r="1"></circle>
+              <circle cx="12" cy="19" r="1"></circle>
+            </svg>
+          </button>
+
+          <div
+            class="more-menu-dropdown"
+            *ngIf="showMoreMenu()"
+            (click)="$event.stopPropagation()"
+          >
+            <button type="button" (click)="openContactInfo()">View Contact</button>
+            <button type="button" class="danger" (click)="clearChat()">Clear Chat</button>
+          </div>
+        </div>
 
       </div>
 
     </header>
+
+    <div class="conversation-search-bar" *ngIf="showConversationSearch() && receiver">
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <circle cx="11" cy="11" r="7"></circle>
+        <path d="M20 20l-4-4"></path>
+      </svg>
+      <input
+        type="text"
+        placeholder="Search in conversation..."
+        [(ngModel)]="conversationSearchQuery"
+        (ngModelChange)="onConversationSearchInput()"
+      />
+      <span class="search-count" *ngIf="conversationSearchQuery().trim()">
+        {{ searchMatchCount() > 0 ? (currentMatchIndex() + ' of ' + searchMatchCount()) : 'No results' }}
+      </span>
+      <button type="button" (click)="prevMatch()" [disabled]="searchMatchCount() === 0" title="Previous">‹</button>
+      <button type="button" (click)="nextMatch()" [disabled]="searchMatchCount() === 0" title="Next">›</button>
+      <button type="button" class="search-close" (click)="toggleConversationSearch()" title="Close">✕</button>
+    </div>
 
 
     <div class="empty-chat" *ngIf="!receiver">
@@ -214,14 +278,26 @@
 
     <div class="messages-area" *ngIf="receiver">
 
-      <div
-        *ngFor="let msg of messages(); trackBy: trackByIndex"
-        class="message-row"
-        [class.sent]="msg.sender === username"
-        [class.received]="msg.sender !== username"
+      <ng-container
+        *ngFor="let msg of messages(); let i = index; trackBy: trackByIndex"
       >
 
-        <div class="message-bubble">
+        <!-- DATE SEPARATOR -->
+        <div
+          *ngIf="shouldShowDateSeparator(i)"
+          class="date-separator"
+        >
+          <span>{{ getDateSeparatorLabel(msg.timestamp) }}</span>
+        </div>
+
+        <!-- MESSAGE -->
+        <div
+          class="message-row"
+          [class.sent]="msg.sender === username"
+          [class.received]="msg.sender !== username"
+        >
+
+          <div class="message-bubble" [class.message-highlight]="isMessageMatch(msg)">
 
           <div class="message-attachment" *ngIf="msg.attachmentData">
             <img
@@ -266,9 +342,11 @@
 
           </div>
 
+          </div>
+
         </div>
 
-      </div>
+      </ng-container>
 
     </div>
 
@@ -355,5 +433,31 @@
     <button type="button" class="lightbox-close" (click)="closeImage()">Close</button>
   </div>
 
+  <div class="contact-info-overlay" *ngIf="showContactInfo()" (click)="closeContactInfo()">
+    <div class="contact-info-card" (click)="$event.stopPropagation()">
+
+      <img
+        *ngIf="getUserAvatar(receiver)"
+        [src]="getUserAvatar(receiver)"
+        class="contact-info-avatar-img"
+      />
+      <div
+        *ngIf="!getUserAvatar(receiver)"
+        class="contact-info-avatar"
+      >
+        {{ receiver.charAt(0).toUpperCase() }}
+      </div>
+
+      <h3>{{ receiver }}</h3>
+
+      <p class="contact-info-status" [class.offline]="!isUserOnline(receiver)">
+        <span class="status-dot" [class.online]="isUserOnline(receiver)"></span>
+        {{ isUserOnline(receiver) ? 'Online' : 'Offline' }}
+      </p>
+
+      <button type="button" class="contact-info-close" (click)="closeContactInfo()">Close</button>
+
+    </div>
+  </div>
 
 </div>

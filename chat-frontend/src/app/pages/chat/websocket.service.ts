@@ -12,7 +12,7 @@ export class WebsocketService {
   constructor(private zone: NgZone) {}
 
   connect(
-    username: string,
+    token: string,
     onMessage: (msg: any) => void,
     onUserListUpdate: (users: string[]) => void,
     onStatusUpdate: (update: any) => void,
@@ -20,18 +20,13 @@ export class WebsocketService {
   ): void {
 
     this.client = new Client({
-      webSocketFactory: () => new SockJS(`http://localhost:8081/chat?username=${username}`),
+      webSocketFactory: () => new SockJS(`http://localhost:8081/chat?token=${encodeURIComponent(token)}`),
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000
     });
 
     this.client.onConnect = () => {
-
-      this.client.subscribe('/user/queue/online-users-init', (message) => {
-        const users = JSON.parse(message.body);
-        this.zone.run(() => onUserListUpdate(users));
-      });
 
       this.client.subscribe('/user/queue/messages', (message) => {
         const parsed = JSON.parse(message.body);

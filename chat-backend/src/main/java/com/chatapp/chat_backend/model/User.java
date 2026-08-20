@@ -1,6 +1,5 @@
 package com.chatapp.chat_backend.model;
 
-
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,4 +21,7 @@ public class User {
 
     @Column(nullable = false)
     private String password;
+
+    @Column(name = "profile_picture", columnDefinition = "TEXT")
+    private String profilePicture;
 }
